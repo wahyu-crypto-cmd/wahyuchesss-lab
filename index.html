@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WahyuChess Lab - Arena Catur 3D, Ensiklopedia & Kuis</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chess.js untuk validasi aturan catur lengkap -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <!-- Font Inter & Cinzel untuk sentuhan klasik elegan -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Cinzel', 'serif'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#151e2e',
+                            950: '#090d16',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom CSS untuk efek 3D Papan Catur & Bidak */
+        body {
+            background-color: #090d16;
+            color: #f8fafc;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .board-viewport {
+            perspective: 1100px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem 0;
+            overflow: hidden;
+        }
+
+        .chess-board-container {
+            width: 100%;
+            max-width: 440px;
+            aspect-ratio: 1 / 1;
+            transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.6s ease;
+            transform-style: preserve-3d;
+            border-radius: 12px;
+            border: 6px solid #334155;
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8), 0 0 0 2px #f59e0b44;
+        }
+
+        /* Mode Tampilan 3D */
+        .board-3d {
+            transform: rotateX(38deg) scale(0.92);
+            box-shadow: 0 32px 0 #1e293b, 0 45px 50px rgba(0, 0, 0, 0.9), 0 0 0 2px #f59e0b66;
+        }
+
+        .board-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            width: 100%;
+            height: 100%;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .square {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.15s ease;
+        }
+
+        .square-light {
+            background-color: #e2e8f0;
+        }
+
+        .square-dark {
+            background-color: #475569;
+        }
+
+        .square-selected {
+            background-color: rgba(245, 158, 11, 0.75) !important;
+        }
+
+        .square-last-move {
+            background-color: rgba(250, 204, 21, 0.38) !important;
+        }
+
+        .square-check {
+            background: radial-gradient(circle, rgba(239,68,68,0.9) 0%, rgba(185,28,28,0.7) 100%) !important;
+        }
+
+        /* Bidak Catur dengan efek berdiri di mode 3D */
+        .piece {
+            font-size: clamp(1.75rem, 6.5vw, 2.75rem);
+            line-height: 1;
+            z-index: 10;
+            transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), filter 0.3s ease;
+            pointer-events: none;
+        }
+
+        .board-3d .piece {
+            transform: rotateX(-32deg) translateY(-10%) scale(1.1);
+            filter: drop-shadow(0 8px 4px rgba(0, 0, 0, 0.65));
+        }
+
+        .piece-white {
+            color: #ffffff;
+            text-shadow: 0 2px 3px rgba(0,0,0,0.85), 0 0 1px #000;
+        }
+
+        .piece-black {
+            color: #0f172a;
+            text-shadow: 0 1px 2px rgba(255,255,255,0.45), 0 0 1px #000;
+        }
+
+        /* Indikator langkah valid */
+        .valid-move-dot {
+            width: 28%;
+            height: 28%;
+            background-color: rgba(16, 185, 129, 0.85);
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .valid-capture-ring {
+            position: absolute;
+            inset: 8%;
+            border: 4px solid rgba(239, 68, 68, 0.85);
+            border-radius: 50%;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        /* Koordinat kecil di sudut papan */
+        .coord-label {
+            position: absolute;
+            font-size: 9px;
+            font-weight: 700;
+            opacity: 0.75;
+            pointer-events: none;
+        }
+        .coord-rank { top: 2px; left: 3px; }
+        .coord-file { bottom: 1px; right: 3px; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #f59e0b; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100">
+
+    <!-- Header & Navigasi Utama -->
+    <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-lg">
+        <div class="max-w-5xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <!-- Brand Logo -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-bold text-2xl shadow-md shadow-amber-500/20">
+                    ♞
+                </div>
+                <div>
+                    <h1 class="font-serif text-xl font-bold tracking-wide text-amber-400">WahyuChess Lab</h1>
+                    <p class="text-xs text-slate-400">Edukasi & Simulasi Catur 3D Interaktif</p>
+                </div>
+            </div>
+
+            <!-- Tab Navigasi -->
+            <nav class="flex bg-slate-850 p-1 rounded-xl border border-slate-800 w-full sm:w-auto justify-between sm:justify-start">
+                <button onclick="switchTab('play')" id="tab-play" class="nav-btn flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-amber-500 text-slate-950 shadow">
+                    ⚔️ Arena 3D
+                </button>
+                <button onclick="switchTab('learn')" id="tab-learn" class="nav-btn flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition-all">
+                    📖 Ensiklopedia
+                </button>
+                <button onclick="switchTab('quiz')" id="tab-quiz" class="nav-btn flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition-all">
+                    🧠 Kuis Catur
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Konten Utama -->
+    <main class="flex-1 max-w-5xl w-full mx-auto px-4 py-5">
+
+        <!-- ========================================================= -->
+        <!-- TAB 1: ARENA CATUR 3D (PLAY)                              -->
+        <!-- ========================================================= -->
+        <section id="section-play" class="tab-section space-y-5">
+            <!-- Bar Status & Pengaturan Cepat -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <div id="turn-indicator" class="w-4 h-4 rounded-full bg-white border-2 border-amber-400 shadow"></div>
+                    <div>
+                        <p id="game-status-text" class="font-bold text-sm sm:text-base text-white">Giliran Putih Melangkah</p>
+                        <p id="game-substatus" class="text-xs text-slate-400">Ketuk bidak untuk melihat langkah</p>
+                    </div>
+                </div>
+
+                <!-- Pilihan Mode Lawan -->
+                <div class="flex items-center gap-2">
+                    <label for="game-mode" class="text-xs text-slate-400 hidden sm:inline">Mode:</label>
+                    <select id="game-mode" onchange="resetGame()" class="bg-slate-800 text-slate-100 text-xs sm:text-sm rounded-xl px-3 py-2 border border-slate-700 focus:outline-none focus:border-amber-500">
+                        <option value="ai-easy">🤖 Lawan AI (Mudah)</option>
+                        <option value="ai-medium" selected>🧠 Lawan AI (Sedang)</option>
+                        <option value="pvp">👥 2 Pemain (Pass & Play)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Grid Arena & Kontrol -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                <!-- Kolom Papan Catur -->
+                <div class="lg:col-span-7 bg-slate-900/70 border border-slate-800 rounded-2xl p-3 sm:p-5 flex flex-col items-center shadow-2xl">
+                    <!-- Toggle 3D / 2D & Flip -->
+                    <div class="w-full flex items-center justify-between mb-2 px-1">
+                        <button onclick="toggle3D()" id="btn-toggle-3d" class="px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 text-xs font-semibold hover:bg-amber-500/30 transition">
+                            🎲 Mode: 3D Perspektif
+                        </button>
+                        <button onclick="flipBoard()" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-xs font-semibold hover:bg-slate-700 transition">
+                            🔄 Putar Papan
+                        </button>
+                    </div>
+
+                    <!-- Viewport Papan -->
+                    <div class="board-viewport w-full">
+                        <div id="chess-board-container" class="chess-board-container board-3d">
+                            <div id="chess-board" class="board-grid"></div>
+                        </div>
+                    </div>
+
+                    <!-- Tombol Aksi Bawah Papan -->
+                    <div class="w-full grid grid-cols-2 gap-3 mt-4">
+                        <button onclick="undoMove()" class="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs sm:text-sm border border-slate-700 transition flex items-center justify-center gap-2">
+                            ↩️ Undo Langkah
+                        </button>
+                        <button onclick="resetGame()" class="py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2">
+                            🔁 Mulai Ulang
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Kolom Riwayat Langkah & Info -->
+                <div class="lg:col-span-5 space-y-4">
+                    <!-- Panel Bidak Dimakan -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Bidak Tertangkap</h3>
+                        <div class="space-y-2 text-lg">
+                            <div class="flex items-center justify-between bg-slate-850 px-3 py-1.5 rounded-lg">
+                                <span class="text-xs text-slate-400">Putih menangkap:</span>
+                                <span id="captured-by-white" class="tracking-widest text-slate-200 min-h-[24px]">-</span>
+                            </div>
+                            <div class="flex items-center justify-between bg-slate-850 px-3 py-1.5 rounded-lg">
+                                <span class="text-xs text-slate-400">Hitam menangkap:</span>
+                                <span id="captured-by-black" class="tracking-widest text-amber-400 min-h-[24px]">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel Riwayat Langkah -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-xs font-semibold uppercase tracking-wider text-amber-400">📜 Riwayat Langkah (Notasi)</h3>
+                            <span id="move-count" class="text-xs text-slate-500">0 Langkah</span>
+                        </div>
+                        <div id="move-history" class="h-48 overflow-y-auto bg-slate-950 rounded-xl p-3 border border-slate-800/80 text-xs sm:text-sm font-mono space-y-1">
+                            <p class="text-slate-500 italic text-center py-8">Belum ada langkah. Mulai mainkan pion putihmu!</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TAB 2: ENSIKLOPEDIA BIDAK (LEARN)                         -->
+        <!-- ========================================================= -->
+        <section id="section-learn" class="tab-section hidden space-y-6">
+            <div class="text-center max-w-2xl mx-auto space-y-2">
+                <h2 class="font-serif text-2xl sm:text-3xl font-bold text-amber-400">Ensiklopedia Bidak Catur</h2>
+                <p class="text-xs sm:text-sm text-slate-400">Pelajari nilai poin, fungsi strategis, serta klik kotak pada papan mini 5×5 untuk melihat simulasi pola gerakan masing-masing bidak.</p>
+            </div>
+
+            <!-- Grid Kartu Bidak -->
+            <div id="encyclopedia-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <!-- Di-render otomatis via JavaScript -->
+            </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TAB 3: KUIS CATUR INTERAKTIF (QUIZ)                       -->
+        <!-- ========================================================= -->
+        <section id="section-quiz" class="tab-section hidden max-w-2xl mx-auto">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 shadow-2xl">
+                
+                <!-- Layar Soal Kuis -->
+                <div id="quiz-container" class="space-y-6">
+                    <div class="flex items-center justify-between text-xs sm:text-sm">
+                        <span id="quiz-progress-text" class="font-semibold text-amber-400">Pertanyaan 1 dari 8</span>
+                        <span id="quiz-score-badge" class="px-3 py-1 rounded-full bg-slate-800 text-slate-300 font-medium">Skor: 0</span>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div id="quiz-progress-bar" class="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-300" style="width: 12.5%"></div>
+                    </div>
+
+                    <!-- Pertanyaan -->
+                    <div>
+                        <h3 id="quiz-question" class="text-base sm:text-xl font-bold text-white leading-relaxed">
+                            Memuat pertanyaan...
+                        </h3>
+                    </div>
+
+                    <!-- Pilihan Jawaban -->
+                    <div id="quiz-options" class="space-y-3">
+                        <!-- Tombol opsi jawaban -->
+                    </div>
+
+                    <!-- Box Penjelasan Setelah Menjawab -->
+                    <div id="quiz-feedback" class="hidden p-4 rounded-xl border text-xs sm:text-sm leading-relaxed">
+                        <p id="quiz-feedback-title" class="font-bold mb-1"></p>
+                        <p id="quiz-feedback-desc" class="text-slate-300"></p>
+                    </div>
+
+                    <!-- Tombol Lanjut -->
+                    <div class="flex justify-end">
+                        <button id="quiz-next-btn" onclick="nextQuestion()" class="hidden px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg transition">
+                            Soal Berikutnya ➡️
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Layar Hasil Akhir Kuis -->
+                <div id="quiz-result" class="hidden text-center space-y-6 py-4">
+                    <div class="w-20 h-20 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-4xl">
+                        🏆
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-xs uppercase tracking-widest text-amber-400 font-semibold">Kuis Selesai!</p>
+                        <h3 id="quiz-rank-title" class="font-serif text-2xl sm:text-3xl font-bold text-white">Grandmaster WahyuChess</h3>
+                        <p id="quiz-final-score" class="text-slate-300 text-sm sm:text-base">Kamu menjawab benar 8 dari 8 pertanyaan (100%)</p>
+                    </div>
+                    <p id="quiz-rank-desc" class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto bg-slate-850 p-4 rounded-xl border border-slate-800">
+                        Luar biasa! Pemahaman strategi dan aturan caturmu sangat tajam.
+                    </p>
+                    <button onclick="restartQuiz()" class="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition">
+                        🔄 Ulangi Kuis Catur
+                    </button>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal Promosi Pion -->
+    <div id="promotion-modal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-amber-500/50 rounded-2xl p-6 max-w-xs w-full text-center shadow-2xl space-y-4">
+            <h3 class="font-serif text-lg font-bold text-amber-400">Promosi Pion!</h3>
+            <p class="text-xs text-slate-300">Pilih bidak pengganti untuk pionmu yang mencapai ujung papan:</p>
+            <div class="grid grid-cols-4 gap-2 text-3xl">
+                <button onclick="selectPromotion('q')" class="p-3 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 rounded-xl transition">♕</button>
+                <button onclick="selectPromotion('r')" class="p-3 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 rounded-xl transition">♖</button>
+                <button onclick="selectPromotion('b')" class="p-3 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 rounded-xl transition">♗</button>
+                <button onclick="selectPromotion('n')" class="p-3 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 rounded-xl transition">♘</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/80 bg-slate-900/50 py-4 px-4 text-center text-xs text-slate-400 mt-10">
+        <p>Dikembangkan dengan penuh dedikasi oleh <span class="text-amber-400 font-semibold">Wahyu</span> &bull; <span class="font-serif">WahyuChess Lab</span></p>
+    </footer>
+
+    <!-- ========================================================= -->
+    <!-- LOGIKA JAVASCRIPT LENGKAP                                 -->
+    <!-- ========================================================= -->
+    <script>
+        // -------------------------------------------------------------
+        // 1. NAVIGASI TAB
+        // -------------------------------------------------------------
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-section').forEach(sec => sec.classList.add('hidden'));
+            document.getElementById(`section-${tabName}`).classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-amber-500', 'text-slate-950', 'shadow');
+                btn.classList.add('text-slate-300');
+            });
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            activeBtn.classList.remove('text-slate-300');
+            activeBtn.classList.add('bg-amber-500', 'text-slate-950', 'shadow');
+        }
+
+        // -------------------------------------------------------------
+        // 2. LOGIKA ARENA CATUR 3D & AI (CHESS.JS)
+        // -------------------------------------------------------------
+        const game = new Chess();
+        let selectedSquare = null;
+        let validMoves = [];
+        let is3D = true;
+        let isFlipped = false;
+        let pendingPromotion = null;
+        let aiThinking = false;
+
+        // Simbol Unicode Bidak Catur
+        const pieceUnicode = {
+            w: { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' },
+            b: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' }
+        };
+
+        // Nilai material untuk AI Minimax
+        const pieceValues = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+
+        function renderBoard() {
+            const boardEl = document.getElementById('chess-board');
+            boardEl.innerHTML = '';
+
+            const boardState = game.board();
+            const history = game.history({ verbose: true });
+            const lastMove = history.length > 0 ? history[history.length - 1] : null;
+            const inCheck = game.in_check();
+            const turn = game.turn();
+
+            const ranks = isFlipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+            const files = isFlipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+            const fileChars = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+            for (let rIdx = 0; rIdx < 8; rIdx++) {
+                for (let fIdx = 0; fIdx < 8; fIdx++) {
+                    const r = ranks[rIdx];
+                    const f = files[fIdx];
+                    const squareName = fileChars[f] + (8 - r);
+                    const piece = boardState[r][f];
+                    const isLight = (r + f) % 2 === 0;
+
+                    const sqDiv = document.createElement('div');
+                    sqDiv.className = `square ${isLight ? 'square-light' : 'square-dark'}`;
+                    sqDiv.dataset.square = squareName;
+
+                    // Highlight kotak terpilih
+                    if (selectedSquare === squareName) {
+                        sqDiv.classList.add('square-selected');
+                    }
+
+                    // Highlight langkah terakhir
+                    if (lastMove && (lastMove.from === squareName || lastMove.to === squareName)) {
+                        sqDiv.classList.add('square-last-move');
+                    }
+
+                    // Highlight Raja yang sedang Skak
+                    if (inCheck && piece && piece.type === 'k' && piece.color === turn) {
+                        sqDiv.classList.add('square-check');
+                    }
+
+                    // Label koordinat di pinggir papan
+                    if (fIdx === 0) {
+                        const rankSpan = document.createElement('span');
+                        rankSpan.className = `coord-label coord-rank ${isLight ? 'text-slate-700' : 'text-slate-300'}`;
+                        rankSpan.textContent = 8 - r;
+                        sqDiv.appendChild(rankSpan);
+                    }
+                    if (rIdx === 7) {
+                        const fileSpan = document.createElement('span');
+                        fileSpan.className = `coord-label coord-file ${isLight ? 'text-slate-700' : 'text-slate-300'}`;
+                        fileSpan.textContent = fileChars[f];
+                        sqDiv.appendChild(fileSpan);
+                    }
+
+                    // Render Bidak
+                    if (piece) {
+                        const pieceSpan = document.createElement('span');
+                        pieceSpan.className = `piece ${piece.color === 'w' ? 'piece-white' : 'piece-black'}`;
+                        pieceSpan.textContent = pieceUnicode[piece.color][piece.type];
+                        sqDiv.appendChild(pieceSpan);
+                    }
+
+                    // Indikator langkah valid (titik hijau atau cincin merah)
+                    const moveObj = validMoves.find(m => m.to === squareName);
+                    if (moveObj) {
+                        if (piece || moveObj.flags.includes('e')) {
+                            const ring = document.createElement('div');
+                            ring.className = 'valid-capture-ring';
+                            sqDiv.appendChild(ring);
+                        } else {
+                            const dot = document.createElement('div');
+                            dot.className = 'valid-move-dot';
+                            sqDiv.appendChild(dot);
+                        }
+                    }
+
+                    sqDiv.addEventListener('click', () => handleSquareClick(squareName));
+                    boardEl.appendChild(sqDiv);
+                }
+            }
+
+            updateStatusUI();
+            updateHistoryUI();
+            updateCapturedUI();
+        }
+
+        function handleSquareClick(square) {
+            if (game.game_over() || aiThinking) return;
+
+            const mode = document.getElementById('game-mode').value;
+            // Jika mode AI dan sedang giliran hitam, abaikan klik user
+            if (mode.startsWith('ai') && game.turn() === 'b') return;
+
+            // Cek apakah kotak yang diklik adalah tujuan langkah yang valid
+            const chosenMove = validMoves.find(m => m.to === square);
+            if (chosenMove) {
+                // Cek apakah promosi pion
+                if (chosenMove.flags.includes('p')) {
+                    pendingPromotion = { from: selectedSquare, to: square };
+                    document.getElementById('promotion-modal').classList.remove('hidden');
+                    return;
+                }
+                executeMove(selectedSquare, square, 'q');
+                return;
+            }
+
+            // Pilih bidak milik pemain yang sedang jalan
+            const piece = game.get(square);
+            if (piece && piece.color === game.turn()) {
+                selectedSquare = square;
+                validMoves = game.moves({ square: square, verbose: true });
+            } else {
+                selectedSquare = null;
+                validMoves = [];
+            }
+
+            renderBoard();
+        }
+
+        function selectPromotion(pieceType) {
+            document.getElementById('promotion-modal').classList.add('hidden');
+            if (pendingPromotion) {
+                executeMove(pendingPromotion.from, pendingPromotion.to, pieceType);
+                pendingPromotion = null;
+            }
+        }
+
+        function executeMove(from, to, promotion = 'q') {
+            const move = game.move({ from, to, promotion });
+            selectedSquare = null;
+            validMoves = [];
+            renderBoard();
+
+            const mode = document.getElementById('game-mode').value;
+            if (!game.game_over() && mode.startsWith('ai') && game.turn() === 'b') {
+                aiThinking = true;
+                updateStatusUI();
+                setTimeout(() => {
+                    makeAIMove(mode);
+                    aiThinking = false;
+                    renderBoard();
+                }, 450);
+            }
+        }
+
+        // Kecerdasan Buatan (AI) Lawan
+        function makeAIMove(mode) {
+            const possibleMoves = game.moves({ verbose: true });
+            if (possibleMoves.length === 0) return;
+
+            if (mode === 'ai-easy') {
+                const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                game.move(randomMove);
+            } else {
+                // Mode Sedang: Evaluasi Minimax kedalaman 2
+                let bestMove = null;
+                let bestValue = -99999;
+
+                // Acak urutan sedikit agar permainan bervariasi
+                possibleMoves.sort(() => Math.random() - 0.5);
+
+                for (let i = 0; i < possibleMoves.length; i++) {
+                    const move = possibleMoves[i];
+                    game.move(move);
+                    const boardValue = minimax(1, -100000, 100000, false);
+                    game.undo();
+
+                    if (boardValue > bestValue) {
+                        bestValue = boardValue;
+                        bestMove = move;
+                    }
+                }
+                game.move(bestMove || possibleMoves[0]);
+            }
+        }
+
+        function evaluateBoard() {
+            let totalEvaluation = 0;
+            const board = game.board();
+            for (let r = 0; r < 8; r++) {
+                for (let f = 0; f < 8; f++) {
+                    const piece = board[r][f];
+                    if (piece) {
+                        let val = pieceValues[piece.type];
+                        // Bonus posisi tengah papan
+                        if ((r === 3 || r === 4) && (f === 3 || f === 4)) val += 25;
+                        totalEvaluation += (piece.color === 'b' ? val : -val);
+                    }
+                }
+            }
+            return totalEvaluation;
+        }
+
+        function minimax(depth, alpha, beta, isMaximizingPlayer) {
+            if (depth === 0 || game.game_over()) {
+                if (game.in_checkmate()) return isMaximizingPlayer ? -50000 : 50000;
+                return evaluateBoard();
+            }
+
+            const moves = game.moves();
+            if (isMaximizingPlayer) {
+                let maxEval = -99999;
+                for (let m of moves) {
+                    game.move(m);
+                    const ev = minimax(depth - 1, alpha, beta, false);
+                    game.undo();
+                    maxEval = Math.max(maxEval, ev);
+                    alpha = Math.max(alpha, ev);
+                    if (beta <= alpha) break;
+                }
+                return maxEval;
+            } else {
+                let minEval = 99999;
+                for (let m of moves) {
+                    game.move(m);
+                    const ev = minimax(depth - 1, alpha, beta, true);
+                    game.undo();
+                    minEval = Math.min(minEval, ev);
+                    beta = Math.min(beta, ev);
+                    if (beta <= alpha) break;
+                }
+                return minEval;
+            }
+        }
+
+        function updateStatusUI() {
+            const indicator = document.getElementById('turn-indicator');
+            const statusText = document.getElementById('game-status-text');
+            const subStatus = document.getElementById('game-substatus');
+
+            if (game.in_checkmate()) {
+                const winner = game.turn() === 'w' ? 'Hitam' : 'Putih';
+                statusText.textContent = `SKAKMAT! ${winner} Menang 🏆`;
+                statusText.className = 'font-bold text-sm sm:text-base text-amber-400';
+                subStatus.textContent = 'Permainan selesai. Tekan Mulai Ulang untuk main lagi.';
+            } else if (game.in_draw() || game.in_stalemate() || game.in_threefold_repetition()) {
+                statusText.textContent = 'Permainan Berakhir Remis (Seri) 🤝';
+                statusText.className = 'font-bold text-sm sm:text-base text-slate-300';
+                subStatus.textContent = 'Tidak ada pemenang pada pertandingan ini.';
+            } else {
+                const isWhite = game.turn() === 'w';
+                indicator.className = `w-4 h-4 rounded-full border-2 border-amber-400 shadow ${isWhite ? 'bg-white' : 'bg-slate-900'}`;
+                
+                if (aiThinking) {
+                    statusText.textContent = 'AI Sedang Berpikir... 🤔';
+                    statusText.className = 'font-bold text-sm sm:text-base text-amber-400';
+                    subStatus.textContent = 'Menghitung langkah balasan terbaik';
+                } else {
+                    statusText.textContent = isWhite ? 'Giliran Putih Melangkah' : 'Giliran Hitam Melangkah';
+                    statusText.className = 'font-bold text-sm sm:text-base text-white';
+                    subStatus.textContent = game.in_check() ? '⚠️ AWAS SKAK! Lindungi Rajamu!' : 'Ketuk bidak untuk melihat titik langkah';
+                }
+            }
+        }
+
+        function updateHistoryUI() {
+            const historyEl = document.getElementById('move-history');
+            const countEl = document.getElementById('move-count');
+            const history = game.history();
+            countEl.textContent = `${history.length} Langkah`;
+
+            if (history.length === 0) {
+                historyEl.innerHTML = '<p class="text-slate-500 italic text-center py-8">Belum ada langkah. Mulai mainkan pion putihmu!</p>';
+                return;
+            }
+
+            let html = '';
+            for (let i = 0; i < history.length; i += 2) {
+                const moveNum = Math.floor(i / 2) + 1;
+                const whiteMove = history[i] || '';
+                const blackMove = history[i + 1] || '';
+                html += `
+                    <div class="flex items-center px-2 py-1 rounded hover:bg-slate-900">
+                        <span class="w-8 text-slate-500">${moveNum}.</span>
+                        <span class="w-20 text-white font-semibold">${whiteMove}</span>
+                        <span class="w-20 text-amber-400 font-semibold">${blackMove}</span>
+                    </div>
+                `;
+            }
+            historyEl.innerHTML = html;
+            historyEl.scrollTop = historyEl.scrollHeight;
+        }
+
+        function updateCapturedUI() {
+            const history = game.history({ verbose: true });
+            const capturedByWhite = [];
+            const capturedByBlack = [];
+
+            history.forEach(m => {
+                if (m.captured) {
+                    if (m.color === 'w') {
+                        capturedByWhite.push(pieceUnicode.b[m.captured]);
+                    } else {
+                        capturedByBlack.push(pieceUnicode.w[m.captured]);
+                    }
+                }
+            });
+
+            document.getElementById('captured-by-white').textContent = capturedByWhite.length ? capturedByWhite.join(' ') : '-';
+            document.getElementById('captured-by-black').textContent = capturedByBlack.length ? capturedByBlack.join(' ') : '-';
+        }
+
+        function toggle3D() {
+            is3D = !is3D;
+            const container = document.getElementById('chess-board-container');
+            const btn = document.getElementById('btn-toggle-3d');
+            if (is3D) {
+                container.classList.add('board-3d');
+                btn.textContent = '🎲 Mode: 3D Perspektif';
+            } else {
+                container.classList.remove('board-3d');
+                btn.textContent = '📐 Mode: 2D Datar';
+            }
+        }
+
+        function flipBoard() {
+            isFlipped = !isFlipped;
+            renderBoard();
+        }
+
+        function undoMove() {
+            if (aiThinking) return;
+            const mode = document.getElementById('game-mode').value;
+            game.undo();
+            // Jika mode lawan AI, undo 2 langkah agar kembali ke giliran pemain
+            if (mode.startsWith('ai') && game.turn() === 'b') {
+                game.undo();
+            }
+            selectedSquare = null;
+            validMoves = [];
+            renderBoard();
+        }
+
+        function resetGame() {
+            game.reset();
+            selectedSquare = null;
+            validMoves = [];
+            aiThinking = false;
+            renderBoard();
+        }
+
+        // -------------------------------------------------------------
+        // 3. ENSIKLOPEDIA BIDAK CATUR (MINI BOARD 5x5 INTERAKTIF)
+        // -------------------------------------------------------------
+        const piecesData = [
+            {
+                id: 'king',
+                name: 'Raja (King)',
+                icon: '♔',
+                points: 'Tak Ternilai (∞)',
+                role: 'Pemimpin Utama & Target Permainan',
+                desc: 'Melangkah 1 petak ke segala arah (horizontal, vertikal, diagonal). Jika Raja terkena skakmat, permainan langsung berakhir.',
+                tip: 'Lakukan gerakan Rokade di awal permainan untuk mengamankan Raja ke sudut papan.',
+                moves: [[1,1],[1,2],[1,3],[2,1],[2,3],[3,1],[3,2],[3,3]]
+            },
+            {
+                id: 'queen',
+                name: 'Menteri / Ratu (Queen)',
+                icon: '♕',
+                points: '9 Poin',
+                role: 'Penyerang Terkuat di Papan',
+                desc: 'Menggabungkan kekuatan Benteng dan Gajah. Dapat melangkah bebas sejauh mungkin ke arah lurus maupun diagonal.',
+                tip: 'Jangan keluarkan Ratu terlalu cepat di awal laga karena mudah dikejar bidak lawan yang bernilai lebih kecil.',
+                moves: [
+                    [0,2],[1,2],[3,2],[4,2], // vertikal
+                    [2,0],[2,1],[2,3],[2,4], // horizontal
+                    [0,0],[1,1],[3,3],[4,4], // diagonal 1
+                    [0,4],[1,3],[3,1],[4,0]  // diagonal 2
+                ]
+            },
+            {
+                id: 'rook',
+                name: 'Benteng (Rook)',
+                icon: '♖',
+                points: '5 Poin',
+                role: 'Penguasa Baris & Kolom Terbuka',
+                desc: 'Melangkah lurus ke depan, belakang, kiri, atau kanan sejauh mungkin selama tidak terhalang bidak lain.',
+                tip: 'Tempatkan Benteng di lajur vertikal yang terbuka (tidak ada pion) dan hubungkan kedua Bentengmu.',
+                moves: [
+                    [0,2],[1,2],[3,2],[4,2],
+                    [2,0],[2,1],[2,3],[2,4]
+                ]
+            },
+            {
+                id: 'bishop',
+                name: 'Gajah / Peluncur (Bishop)',
+                icon: '♗',
+                points: '3 Poin',
+                role: 'Penembak Jarak Jauh Diagonal',
+                desc: 'Melangkah secara diagonal sejauh mungkin. Setiap pemain memiliki satu Gajah petak terang dan satu Gajah petak gelap.',
+                tip: 'Sepasang Gajah yang bekerja sama sangat mematikan di papan yang terbuka lebar.',
+                moves: [
+                    [0,0],[1,1],[3,3],[4,4],
+                    [0,4],[1,3],[3,1],[4,0]
+                ]
+            },
+            {
+                id: 'knight',
+                name: 'Kuda (Knight)',
+                icon: '♘',
+                points: '3 Poin',
+                role: 'Ahli Serangan Kejutan & Garpu',
+                desc: 'Melangkah membentuk huruf "L" (2 petak lurus + 1 petak belok). Satu-satunya bidak yang bisa melompati bidak lain!',
+                tip: 'Kuda paling kuat bila ditempatkan di pusat papan karena jangkauan lompatannya mencapai 8 petak maksimal.',
+                moves: [
+                    [0,1],[0,3],[1,0],[1,4],
+                    [3,0],[3,4],[4,1],[4,3]
+                ]
+            },
+            {
+                id: 'pawn',
+                name: 'Pion (Pawn)',
+                icon: '♙',
+                points: '1 Poin',
+                role: 'Pasukan Garis Depan & Calon Ratu',
+                desc: 'Maju 1 petak ke depan (boleh 2 petak pada langkah pertama), namun memakan bidak lawan secara diagonal 1 petak.',
+                tip: 'Jika berhasil mencapai ujung papan lawan, Pion dapat berpromosi menjadi Ratu, Benteng, Gajah, atau Kuda!',
+                moves: [[1,2]],
+                captureMoves: [[1,1],[1,3]]
+            }
+        ];
+
+        function renderEncyclopedia() {
+            const grid = document.getElementById('encyclopedia-grid');
+            grid.innerHTML = '';
+
+            piecesData.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-5 shadow-xl flex flex-col justify-between transition-all duration-300';
+
+                // Bangun mini papan 5x5 dengan bidak di tengah (2,2)
+                let miniBoardHTML = '<div class="grid grid-cols-5 grid-rows-5 w-36 h-36 mx-auto rounded-lg overflow-hidden border-2 border-slate-700 my-3 shadow-inner">';
+                for (let r = 0; r < 5; r++) {
+                    for (let c = 0; c < 5; c++) {
+                        const isLight = (r + c) % 2 === 0;
+                        const isCenter = (r === 2 && c === 2);
+                        const isValid = p.moves.some(m => m[0] === r && m[1] === c);
+                        const isCapture = p.captureMoves && p.captureMoves.some(m => m[0] === r && m[1] === c);
+
+                        let cellContent = '';
+                        if (isCenter) {
+                            cellContent = `<span class="text-2xl text-white drop-shadow">${p.icon}</span>`;
+                        } else if (isValid) {
+                            cellContent = `<span class="w-3 h-3 rounded-full bg-emerald-400 shadow shadow-emerald-400"></span>`;
+                        } else if (isCapture) {
+                            cellContent = `<span class="w-3 h-3 rounded-full bg-rose-500 shadow shadow-rose-500" title="Arah makan pion"></span>`;
+                        }
+
+                        miniBoardHTML += `
+                            <div class="flex items-center justify-center ${isLight ? 'bg-slate-300' : 'bg-slate-600'}">
+                                ${cellContent}
+                            </div>
+                        `;
+                    }
+                }
+                miniBoardHTML += '</div>';
+
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                            <div class="flex items-center gap-2.5">
+                                <span class="text-3xl text-amber-400">${p.icon}</span>
+                                <div>
+                                    <h3 class="font-bold text-base text-white">${p.name}</h3>
+                                    <p class="text-xs text-amber-400/90 font-medium">${p.role}</p>
+                                </div>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-lg bg-slate-800 text-amber-400 font-bold text-xs border border-slate-700">
+                                ${p.points}
+                            </span>
+                        </div>
+
+                        ${miniBoardHTML}
+
+                        <p class="text-xs text-slate-300 leading-relaxed mt-2">${p.desc}</p>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-t border-slate-800/80 bg-slate-950/60 p-3 rounded-xl">
+                        <p class="text-[11px] text-slate-400"><strong class="text-amber-400">💡 Tips Pro:</strong> ${p.tip}</p>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // -------------------------------------------------------------
+        // 4. KUIS CATUR INTERAKTIF
+        // -------------------------------------------------------------
+        const quizQuestions = [
+            {
+                q: "Bidak catur manakah yang menjadi satu-satunya bidak yang dapat melompati bidak lain di atas papan?",
+                options: ["Menteri (Queen)", "Benteng (Rook)", "Kuda (Knight)", "Gajah (Bishop)"],
+                answer: 2,
+                explanation: "Kuda (Knight) melangkah membentuk huruf 'L' dan merupakan satu-satunya bidak yang diizinkan melompati bidak kawan maupun lawan."
+            },
+            {
+                q: "Berapakah nilai poin standar dari bidak Menteri/Ratu (Queen) dalam perhitungan materi catur?",
+                options: ["5 Poin", "7 Poin", "9 Poin", "10 Poin"],
+                answer: 2,
+                explanation: "Menteri (Queen) bernilai 9 poin karena memiliki kombinasi gerakan lurus seperti Benteng (5 poin) dan diagonal seperti Gajah (3 poin)."
+            },
+            {
+                q: "Apa nama gerakan khusus yang melibatkan Raja dan Benteng secara bersamaan untuk mengamankan posisi Raja?",
+                options: ["En Passant", "Rokade (Castling)", "Promosi", "Skakmat"],
+                answer: 1,
+                explanation: "Rokade (Castling) memungkinkan Raja bergeser dua petak ke arah Benteng dan Benteng melompati Raja dalam satu giliran."
+            },
+            {
+                q: "Dalam taktik catur, istilah 'Garpu' (Fork) berarti...",
+                options: [
+                    "Menyerang dua atau lebih bidak lawan secara bersamaan dengan satu bidak",
+                    "Mengorbankan pion di awal permainan",
+                    "Menjebak Raja di sudut papan dengan dua Benteng",
+                    "Menukar Menteri dengan dua Kuda"
+                ],
+                answer: 0,
+                explanation: "Garpu (Fork) terjadi ketika satu bidak (seringkali Kuda atau Pion) mengancam dua bidak berharga lawan sekaligus."
+            },
+            {
+                q: "Apa yang terjadi jika sebuah Pion berhasil mencapai baris paling ujung (baris ke-8 bagi Putih)?",
+                options: [
+                    "Permainan langsung dimenangkan oleh pemilik pion",
+                    "Pion tersebut menghilang dari papan",
+                    "Pion wajib dipromosikan menjadi Ratu, Benteng, Gajah, atau Kuda",
+                    "Pion berubah menjadi Raja kedua"
+                ],
+                answer: 2,
+                explanation: "Aturan Promosi mewajibkan pion yang menyentuh baris akhir untuk langsung diganti menjadi Ratu, Benteng, Gajah, atau Kuda."
+            },
+            {
+                q: "Kondisi ketika Raja sedang tidak dalam ancaman skak, namun pemain tidak memiliki langkah sah sama sekali disebut...",
+                options: ["Skakmat (Checkmate)", "Pat / Remis (Stalemate)", "Rokade Panjang", "Skak Abadi"],
+                answer: 1,
+                explanation: "Stalemate (Pat) membuat permainan berakhir seri/remis karena pemain yang mendapat giliran tidak bisa melangkah sementara Rajanya aman."
+            },
+            {
+                q: "Mengapa menguasai 4 petak tengah papan (e4, d4, e5, d5) sangat penting pada fase pembukaan (Opening)?",
+                options: [
+                    "Agar bidak memiliki ruang gerak maksimal dan membatasi pergerakan lawan",
+                    "Karena petak tengah memberikan poin tambahan otomatis",
+                    "Supaya Raja bisa langsung maju ke tengah",
+                    "Agar permainan cepat selesai dalam 5 langkah"
+                ],
+                answer: 0,
+                explanation: "Pusat papan adalah titik strategis utama; bidak yang berada di tengah memiliki jangkauan serangan ke seluruh sisi papan."
+            },
+            {
+                q: "Bidak Gajah (Bishop) yang memulai permainan di petak warna terang...",
+                options: [
+                    "Bisa berpindah ke petak gelap setelah langkah ke-10",
+                    "Akan selalu berada di petak warna terang sepanjang permainan",
+                    "Hanya boleh melangkah maju",
+                    "Dapat melompati pion sendiri"
+                ],
+                answer: 1,
+                explanation: "Karena Gajah hanya bergerak secara diagonal, Gajah petak terang selamanya hanya dapat menginjak petak berwarna terang."
+            }
+        ];
+
+        let currentQuizIdx = 0;
+        let quizScore = 0;
+        let quizAnswered = false;
+
+        function loadQuizQuestion() {
+            quizAnswered = false;
+            const qObj = quizQuestions[currentQuizIdx];
+
+            document.getElementById('quiz-progress-text').textContent = `Pertanyaan ${currentQuizIdx + 1} dari ${quizQuestions.length}`;
+            document.getElementById('quiz-score-badge').textContent = `Skor: ${quizScore}`;
+            document.getElementById('quiz-progress-bar').style.width = `${((currentQuizIdx + 1) / quizQuestions.length) * 100}%`;
+            document.getElementById('quiz-question').textContent = qObj.q;
+
+            const optionsEl = document.getElementById('quiz-options');
+            optionsEl.innerHTML = '';
+
+            qObj.options.forEach((optText, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'quiz-opt-btn w-full text-left p-3.5 sm:p-4 rounded-xl bg-slate-850 hover:bg-slate-800 border border-slate-700 text-xs sm:text-sm font-medium text-slate-200 transition flex items-center gap-3';
+                const letters = ['A', 'B', 'C', 'D'];
+                btn.innerHTML = `
+                    <span class="w-7 h-7 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-bold text-amber-400 shrink-0">${letters[idx]}</span>
+                    <span>${optText}</span>
+                `;
+                btn.onclick = () => checkQuizAnswer(idx, btn);
+                optionsEl.appendChild(btn);
+            });
+
+            document.getElementById('quiz-feedback').classList.add('hidden');
+            document.getElementById('quiz-next-btn').classList.add('hidden');
+        }
+
+        function checkQuizAnswer(selectedIdx, clickedBtn) {
+            if (quizAnswered) return;
+            quizAnswered = true;
+
+            const qObj = quizQuestions[currentQuizIdx];
+            const allBtns = document.querySelectorAll('.quiz-opt-btn');
+            const feedbackBox = document.getElementById('quiz-feedback');
+            const feedbackTitle = document.getElementById('quiz-feedback-title');
+            const feedbackDesc = document.getElementById('quiz-feedback-desc');
+
+            allBtns.forEach((b, i) => {
+                b.disabled = true;
+                if (i === qObj.answer) {
+                    b.classList.remove('bg-slate-850', 'border-slate-700');
+                    b.classList.add('bg-emerald-950/80', 'border-emerald-500', 'text-emerald-200');
+                }
+            });
+
+            if (selectedIdx === qObj.answer) {
+                quizScore++;
+                document.getElementById('quiz-score-badge').textContent = `Skor: ${quizScore}`;
+                feedbackBox.className = 'p-4 rounded-xl border border-emerald-500/50 bg-emerald-950/40 text-xs sm:text-sm leading-relaxed';
+                feedbackTitle.textContent = '✅ Jawaban Benar!';
+                feedbackTitle.className = 'font-bold mb-1 text-emerald-400';
+            } else {
+                clickedBtn.classList.remove('bg-slate-850', 'border-slate-700');
+                clickedBtn.classList.add('bg-rose-950/80', 'border-rose-500', 'text-rose-200');
+                feedbackBox.className = 'p-4 rounded-xl border border-rose-500/50 bg-rose-950/40 text-xs sm:text-sm leading-relaxed';
+                feedbackTitle.textContent = '❌ Kurang Tepat!';
+                feedbackTitle.className = 'font-bold mb-1 text-rose-400';
+            }
+
+            feedbackDesc.textContent = qObj.explanation;
+            feedbackBox.classList.remove('hidden');
+
+            const nextBtn = document.getElementById('quiz-next-btn');
+            nextBtn.textContent = currentQuizIdx === quizQuestions.length - 1 ? 'Lihat Hasil Akhir 🏆' : 'Soal Berikutnya ➡️';
+            nextBtn.classList.remove('hidden');
+        }
+
+        function nextQuestion() {
+            currentQuizIdx++;
+            if (currentQuizIdx < quizQuestions.length) {
+                loadQuizQuestion();
+            } else {
+                showQuizResult();
+            }
+        }
+
+        function showQuizResult() {
+            document.getElementById('quiz-container').classList.add('hidden');
+            const resultEl = document.getElementById('quiz-result');
+            resultEl.classList.remove('hidden');
+
+            const percentage = Math.round((quizScore / quizQuestions.length) * 100);
+            document.getElementById('quiz-final-score').textContent = `Kamu menjawab benar ${quizScore} dari ${quizQuestions.length} pertanyaan (${percentage}%)`;
+
+            let rankTitle = '';
+            let rankDesc = '';
+            if (percentage >= 85) {
+                rankTitle = 'Grandmaster WahyuChess 👑';
+                rankDesc = 'Luar biasa! Pengetahuanmu tentang aturan, nilai bidak, dan taktik catur sangat tajam layaknya seorang master.';
+            } else if (percentage >= 60) {
+                rankTitle = 'Taktisi Klub Catur ⚔️';
+                rankDesc = 'Bagus sekali! Kamu sudah menguasai dasar-dasar penting catur. Terus berlatih di Arena 3D untuk mengasah instingmu!';
+            } else {
+                rankTitle = 'Pemula Berbakat 🌱';
+                rankDesc = 'Awal yang bagus! Coba baca kembali menu Ensiklopedia Bidak untuk memahami fungsi tiap bidak sebelum mengulang kuis.';
+            }
+
+            document.getElementById('quiz-rank-title').textContent = rankTitle;
+            document.getElementById('quiz-rank-desc').textContent = rankDesc;
+        }
+
+        function restartQuiz() {
+            currentQuizIdx = 0;
+            quizScore = 0;
+            document.getElementById('quiz-result').classList.add('hidden');
+            document.getElementById('quiz-container').classList.remove('hidden');
+            loadQuizQuestion();
+        }
+
+        // Inisialisasi saat halaman dimuat
+        window.onload = function() {
+            renderBoard();
+            renderEncyclopedia();
+            loadQuizQuestion();
+        };
+    </script>
+</body>
+</html>
